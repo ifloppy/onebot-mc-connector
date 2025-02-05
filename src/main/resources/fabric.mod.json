@@ -1,0 +1,30 @@
+{
+	"schemaVersion": 1,
+	"id": "onebot-mc-connector",
+	"version": "${version}",
+	"name": "OneBot MC Connector",
+	"description": "A Minecraft mod that connects with OneBot protocol",
+	"authors": [
+		"iruanp"
+	],
+	"contact": {
+		"sources": "https://github.com/iruanp/onebot-mc-connector"
+	},
+	"license": "MIT",
+	"icon": "assets/onebot-mc-connector/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.iruanp.omc.OnebotMcConnector"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.16.9",
+		"minecraft": "~1.21.1",
+		"java": ">=21",
+		"fabric-api": "*"
+	},
+	"suggests": {
+		"another-mod": "*"
+	}
+}
