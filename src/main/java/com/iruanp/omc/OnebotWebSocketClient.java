@@ -10,17 +10,22 @@ import org.java_websocket.handshake.ServerHandshake;
 import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class OnebotWebSocketClient extends WebSocketClient {
     private final Config config;
     private final Gson gson;
-    private boolean connected;
+    private boolean isConnected = false;
+    private final ScheduledExecutorService reconnectExecutor;
+    private static final int RECONNECT_DELAY_SECONDS = 5;
 
     public OnebotWebSocketClient(Config config) {
         super(URI.create(config.onebotUrl));
         this.config = config;
         this.gson = new Gson();
-        this.connected = false;
+        this.reconnectExecutor = Executors.newSingleThreadScheduledExecutor();
         OnebotMcConnector.LOGGER.info("Initializing WebSocket client with URL: " + config.onebotUrl);
 
         // Add authorization header if token is provided
@@ -35,7 +40,7 @@ public class OnebotWebSocketClient extends WebSocketClient {
     @Override
     public void onOpen(ServerHandshake handshakedata) {
         OnebotMcConnector.LOGGER.info("Connected to OneBot WebSocket server with status: " + handshakedata.getHttpStatus());
-        connected = true;
+        isConnected = true;
     }
 
     @Override
@@ -97,19 +102,21 @@ public class OnebotWebSocketClient extends WebSocketClient {
 
     @Override
     public void onClose(int code, String reason, boolean remote) {
+        isConnected = false;
         OnebotMcConnector.LOGGER.info("Disconnected from OneBot WebSocket server: " + reason + " (code: " + code + ", remote: " + remote + ")");
-        connected = false;
         
-        // Try to reconnect after 5 seconds
-        if (remote) {
+        // Schedule reconnection attempt on a separate thread
+        reconnectExecutor.schedule(() -> {
             try {
-                Thread.sleep(5000);
                 OnebotMcConnector.LOGGER.info("Attempting to reconnect...");
+                if (!this.isClosed()) {
+                    this.close();
+                }
                 this.reconnect();
             } catch (Exception e) {
                 OnebotMcConnector.LOGGER.error("Failed to reconnect", e);
             }
-        }
+        }, RECONNECT_DELAY_SECONDS, TimeUnit.SECONDS);
     }
 
     @Override
@@ -117,10 +124,21 @@ public class OnebotWebSocketClient extends WebSocketClient {
         OnebotMcConnector.LOGGER.error("WebSocket error", ex);
     }
 
+    @Override
+    public void close() {
+        reconnectExecutor.shutdown();
+        try {
+            reconnectExecutor.awaitTermination(5, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        super.close();
+    }
+
     public boolean isConnected() {
         boolean isOpen = isOpen();
-        OnebotMcConnector.LOGGER.debug("Connection status - connected: " + connected + ", isOpen: " + isOpen);
-        return connected && isOpen;
+        OnebotMcConnector.LOGGER.debug("Connection status - connected: " + isConnected + ", isOpen: " + isOpen);
+        return isConnected && isOpen;
     }
 
     public void sendGroupMessage(String groupId, String message) {

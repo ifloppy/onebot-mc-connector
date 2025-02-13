@@ -7,6 +7,8 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.text.Text;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.minecraft.server.command.CommandManager;
 
 public class OnebotMcConnector implements ModInitializer {
 	public static final Logger LOGGER = LoggerFactory.getLogger("onebot-mc-connector");
@@ -21,6 +23,30 @@ public class OnebotMcConnector implements ModInitializer {
 		// Load config
 		config = Config.loadConfig();
 		
+		// Register reload command
+		CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
+			dispatcher.register(CommandManager.literal("onebot")
+				.requires(source -> source.hasPermissionLevel(4)) // Requires operator permission
+				.then(CommandManager.literal("reload")
+					.executes(context -> {
+						// Reload config
+						config = Config.loadConfig();
+						
+						// Disconnect existing client if connected
+						if (wsClient != null && wsClient.isOpen()) {
+							wsClient.close();
+						}
+						
+						// Create and connect new client
+						wsClient = new OnebotWebSocketClient(config);
+						wsClient.connect();
+						
+						// Send success message
+						context.getSource().sendMessage(Text.of("§aOnebot config reloaded and connection reset"));
+						return 1;
+					})));
+		});
+
 		// Register server start/stop events
 		ServerLifecycleEvents.SERVER_STARTING.register(mcServer -> {
 			// Store server instance
